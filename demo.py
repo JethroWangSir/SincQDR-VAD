@@ -177,8 +177,8 @@ with gr.Blocks() as demo:
     with gr.Row():
         with gr.Column():
             # Separate recording and file upload
-            record_input = gr.Audio(source="microphone", type="filepath", label="Record Audio")
-            upload_input = gr.Audio(source="upload", type="filepath", label="Upload Audio")
+            record_input = gr.Microphone(type="filepath", label="Record Audio")
+            upload_input = gr.Audio(type="filepath", label="Upload Audio")
             threshold_input = gr.Slider(minimum=0, maximum=1, value=0.5, step=0.1, label="Threshold")
         with gr.Column():
             prediction_output = gr.Textbox(label="Prediction")
