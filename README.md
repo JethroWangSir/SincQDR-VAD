@@ -1,2 +1,2 @@
-# SincVAD: A Lightweight Frequency-Aware Framework for Robust Voice Activity Detection Leveraging Sinc-Extractor and Metric-Oriented Loss
-Demo: https://huggingface.co/spaces/jethrowang/SincVAD_Demo
+# SincQDR-VAD: A Noise-Robust Voice Activity Detection Framework Leveraging Learnable Filters and Ranking-Aware Optimization
+Demo: https://huggingface.co/spaces/jethrowang/SincQDR_Demo
