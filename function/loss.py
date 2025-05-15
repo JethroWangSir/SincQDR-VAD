@@ -2,16 +2,16 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-class AUROCLoss(nn.Module):
+class QDRLoss(nn.Module):
     """
-    AUROCLoss class to compute either Pairwise Square Loss (PSQ) or Composite Square Loss (CSQ).
+    QDRLoss class to compute either Pairwise Square Loss (PSQ) or Composite Square Loss (CSQ).
     
     Args:
         loss_type (str): Type of loss to compute ('psq' or 'csq').
         margin (float): Hyperparameter c in the loss function.
     """
     def __init__(self, loss_type='psq', margin=0.5):
-        super(AUROCLoss, self).__init__()
+        super(QDRLoss, self).__init__()
         assert loss_type in ['psq', 'csq'], "loss_type must be 'psq' or 'csq'"
         self.loss_type = loss_type
         self.margin = margin
