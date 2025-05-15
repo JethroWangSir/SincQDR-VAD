@@ -48,8 +48,9 @@ class GlobalLayerNorm(nn.Module):
         else:
             x = (x-mean)/torch.sqrt(var+self.eps)
         return x
+
     
-class SincExtractor(nn.Module):
+class TimeSincExtractor(nn.Module):
     """Sinc-based convolution
     Parameters
     ----------
@@ -94,7 +95,7 @@ class SincExtractor(nn.Module):
                  freq_nml=False, range_constraint=False, freq_init='uniform', norm_after=True, sample_rate=16000, in_channels=1,
                  stride=1, padding=0, dilation=1, bias=False, groups=1, min_low_hz=50, min_band_hz=50, bi_factor=False, frame_length=400, hop_length=160):
 
-        super(SincExtractor,self).__init__()
+        super(TimeSincExtractor,self).__init__()
 
         if in_channels != 1:
             # msg = (f'SincConv only support one input channel '
@@ -285,4 +286,173 @@ class SincExtractor(nn.Module):
         # print("Permuted log filtered energy:", log_filtered_energy.shape)  # (batch_size, channels, out_channels(frequency), n_samples_out(time))
     
         return log_filtered_energy, self.filters, self.stride, self.padding
+
+
+class FreqSincExtractor(nn.Module):
+    @staticmethod
+    def to_mel(hz):
+        return 2595 * np.log10(1 + hz / 700)
+
+    @staticmethod
+    def to_hz(mel):
+        return 700 * (10 ** (mel / 2595) - 1)
+    
+    def swap_(self, x, y, sort=False):
+        mini = torch.minimum(x, y)
+        maxi = torch.maximum(x, y)
+        if sort:
+            mini, idx = torch.sort(mini)
+            maxi = maxi[idx].view(mini.shape)
+        return mini, maxi
+
+    def __init__(self, out_channels, kernel_size, triangular=False, 
+                 freq_nml=False, range_constraint=False, freq_init='uniform',
+                 norm_after=True, sample_rate=16000, in_channels=1,
+                 stride=1, padding=0, dilation=1, bias=False, groups=1,
+                 min_low_hz=50, min_band_hz=50, bi_factor=False,
+                 frame_length=400, hop_length=160, n_fft=400):
+        super(FreqSincExtractor, self).__init__()
         
+        if in_channels != 1:
+            msg = "FreqSincExtractor only supports one input channel (here, in_channels = {%i})" % (in_channels)
+            raise ValueError(msg)
+
+        self.out_channels = out_channels
+        self.kernel_size = kernel_size
+        self.triangular = triangular
+        self.freq_nml = freq_nml
+        self.sample_rate = sample_rate
+        self.nyquist_rate = sample_rate/2
+        self.min_low_hz = min_low_hz
+        self.min_band_hz = min_band_hz
+        self.range_constraint = range_constraint
+        self.bi_factor = bi_factor
+        self.frame_length = frame_length
+        self.hop_length = hop_length
+        self.n_fft = n_fft
+        self.stride = stride
+        self.padding = padding
+        self.output_size = 64
+
+        # Initialize frequency bands
+        if self.range_constraint:
+            if freq_init == "uniform":
+                low_freq, high_freq = torch.rand(out_channels*2).chunk(2)
+            elif freq_init == "mel":
+                low_hz = 30
+                high_hz = self.nyquist_rate - (self.min_low_hz + self.min_band_hz)
+                mel = np.linspace(self.to_mel(low_hz),
+                                self.to_mel(high_hz),
+                                self.out_channels + 1)
+                hz = self.to_hz(mel)
+                low_freq = torch.Tensor(hz[:-1]) / self.nyquist_rate
+                high_freq = torch.Tensor(hz[1:]) / self.nyquist_rate
+            else:
+                raise ValueError('FreqSincExtractor must specify the freq initialization methods.')
+                
+            low_freq, high_freq = self.swap_(low_freq, high_freq)
+            
+            if self.bi_factor:
+                self.band_imp = nn.Parameter(torch.ones(out_channels))
+            self.low_f_ = nn.Parameter(low_freq.view(-1, 1))
+            self.high_f_ = nn.Parameter(high_freq.view(-1, 1))
+        else:
+            low_hz = 30
+            high_hz = self.nyquist_rate - (self.min_low_hz + self.min_band_hz)
+            mel = np.linspace(self.to_mel(low_hz),
+                            self.to_mel(high_hz),
+                            self.out_channels + 1)
+            hz = self.to_hz(mel)
+            self.low_hz_ = nn.Parameter(torch.Tensor(hz[:-1]).view(-1, 1))
+            self.band_hz_ = nn.Parameter(torch.Tensor(np.diff(hz)).view(-1, 1))
+
+        # Frequency axis for STFT
+        self.freq_axis = torch.linspace(0, self.nyquist_rate, self.n_fft//2 + 1)
+        
+        self.norm_after = norm_after
+        if self.norm_after:
+            self.ln = GlobalLayerNorm(out_channels)
+
+    def get_filters(self):
+        if self.range_constraint:
+            low_f_, high_f_ = self.swap_(torch.abs(self.low_f_), torch.abs(self.high_f_))
+            low = self.min_low_hz + low_f_ * self.nyquist_rate
+            high = torch.clamp(self.min_low_hz + high_f_ * self.nyquist_rate,
+                             self.min_low_hz, self.nyquist_rate)
+        else:
+            low = self.min_low_hz + torch.abs(self.low_hz_)
+            high = torch.clamp(low + self.min_band_hz + torch.abs(self.band_hz_),
+                             self.min_low_hz, self.nyquist_rate)
+
+        # Create frequency domain filters
+        freq_axis = self.freq_axis.to(low.device)
+        filters = torch.zeros((self.out_channels, len(freq_axis))).to(low.device)
+        
+        for i in range(self.out_channels):
+            mask = (freq_axis >= low[i]) & (freq_axis <= high[i])
+            filters[i, mask] = 1.0
+            
+            if self.triangular:
+                center_freq = (low[i] + high[i]) / 2
+                bandwidth = high[i] - low[i]
+                mask = (freq_axis >= low[i]) & (freq_axis <= high[i])
+                freq_response = 1.0 - torch.abs(freq_axis[mask] - center_freq) / (bandwidth/2)
+                filters[i, mask] = freq_response
+
+        if self.freq_nml:
+            filters = F.normalize(filters, p=2, dim=1)
+            
+        if self.bi_factor:
+            band_imp = F.relu(self.band_imp)
+            filters = filters * band_imp.unsqueeze(-1)
+            
+        return filters
+
+    def forward(self, waveforms, embedding=None):
+        batch_size = waveforms.shape[0]
+        
+        # Calculate necessary padding to achieve the correct output size
+        target_length = self.hop_length * (self.output_size - 1) + self.frame_length
+        current_length = waveforms.shape[-1]
+        padding_needed = target_length - current_length
+        
+        # Pad the input if necessary
+        if padding_needed > 0:
+            waveforms = F.pad(waveforms, (0, padding_needed))
+        
+        # Compute STFT
+        stft = torch.stft(waveforms.squeeze(1), 
+                        n_fft=self.n_fft,
+                        hop_length=self.hop_length,
+                        win_length=self.frame_length,
+                        window=torch.hann_window(self.frame_length).to(waveforms.device),
+                        return_complex=True)
+        
+        # Get magnitude spectrogram
+        mag_spec = torch.abs(stft)  # (batch_size, freq_bins, time_frames)
+        
+        # Get and apply filters
+        filters = self.get_filters()  # (out_channels, freq_bins)
+        filtered = torch.matmul(filters, mag_spec)  # (batch_size, out_channels, time_frames)
+        
+        if self.norm_after:
+            filtered = self.ln(filtered)
+        
+        # Compute log energy
+        energy = filtered ** 2
+        log_energy = torch.log10(energy + 1e-6)
+        
+        # Ensure correct time dimension
+        if log_energy.shape[-1] != self.output_size:
+            log_energy = F.interpolate(
+                log_energy,
+                size=self.output_size,
+                mode='linear',
+                align_corners=False
+            )
+        
+        # Reshape to the desired output format
+        log_energy = log_energy.unsqueeze(1)  # Add channel dimension
+        log_energy = log_energy.permute(0, 1, 3, 2)  # Rearrange to (batch, channel, freq, time)
+        
+        return log_energy, filters, self.stride, self.padding
