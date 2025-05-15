@@ -6,14 +6,14 @@ import numpy as np
 import json
 from tqdm import tqdm
 from dataset import AVA_Tuple
-from model.sincvad import SincVAD
+from model.sincqdrvad import SincQDRVAD
 from function.util import model_info, median_smoothing_filter, metrics_calculation
 
 THRESHOLD = 0.5
 WINDOW_SIZE = 0.63
 SINC_CONV = True
-AUROC_LOSS_WEIGHT = 0.05
-AUROC_LOSS_TYPE = 'psq'
+QDR_LOSS_WEIGHT = 0.05
+QDR_LOSS_TYPE = 'psq'
 
 if WINDOW_SIZE == 0.63:
     overlap = 0.875
@@ -38,14 +38,14 @@ elif WINDOW_SIZE == 0.032:
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-if SINC_CONV and AUROC_LOSS_WEIGHT > 0.0:
-    name = f'exp_{WINDOW_SIZE}_sinc_tinyvad_{AUROC_LOSS_TYPE}_{AUROC_LOSS_WEIGHT}'
+if SINC_CONV and QDR_LOSS_WEIGHT > 0.0:
+    name = f'exp_{WINDOW_SIZE}_sinc_tinyvad_{QDR_LOSS_TYPE}_{QDR_LOSS_WEIGHT}'
     max_duration = 30.0
 elif SINC_CONV:
     name = f'exp_{WINDOW_SIZE}_sinc_tinyvad'
     max_duration = 30.0
-elif AUROC_LOSS_WEIGHT > 0.0:
-    name = f'exp_{WINDOW_SIZE}_tinyvad_{AUROC_LOSS_TYPE}_{AUROC_LOSS_WEIGHT}'
+elif QDR_LOSS_WEIGHT > 0.0:
+    name = f'exp_{WINDOW_SIZE}_tinyvad_{QDR_LOSS_TYPE}_{QDR_LOSS_WEIGHT}'
     max_duration = 300.0
 else:
     name = f'exp_{WINDOW_SIZE}_tinyvad'
@@ -118,13 +118,13 @@ print(f"AUROC: {auroc:.4f}, FPR: {fpr:.4f}, FNR: {fnr:.4f}, F2-score: {f2_score:
 
 
 # Test AVA (SNR)
-snr_list = [10, 5, 0]
+snr_list = [10, 5, 0, -5, -10]
 results_snr = {}
 
 for snr in snr_list:
     print(f'Loading AVA SNR={snr} test set ...')
     test_dataset = AVA_Tuple(
-        f'/share/nas169/jethrowang/TinyVAD/data/AVA/snr{snr}',
+        f'/share/nas169/jethrowang/TinyVAD/data/AVA/snr/{snr}',
         max_duration=max_duration,
         sample_duration=WINDOW_SIZE,
         overlap=overlap,
