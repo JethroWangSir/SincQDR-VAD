@@ -12,7 +12,7 @@ from function.util import model_info, median_smoothing_filter, metrics_calculati
 THRESHOLD = 0.5
 WINDOW_SIZE = 0.63
 SINC_CONV = True
-QDR_LOSS_WEIGHT = 0.05
+QDR_LOSS_WEIGHT = 0.25
 QDR_LOSS_TYPE = 'psq'
 
 if WINDOW_SIZE == 0.63:
@@ -40,10 +40,10 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 if SINC_CONV and QDR_LOSS_WEIGHT > 0.0:
     name = f'exp_{WINDOW_SIZE}_sinc_tinyvad_{QDR_LOSS_TYPE}_{QDR_LOSS_WEIGHT}'
-    max_duration = 30.0
+    max_duration = 300.0
 elif SINC_CONV:
     name = f'exp_{WINDOW_SIZE}_sinc_tinyvad'
-    max_duration = 30.0
+    max_duration = 300.0
 elif QDR_LOSS_WEIGHT > 0.0:
     name = f'exp_{WINDOW_SIZE}_tinyvad_{QDR_LOSS_TYPE}_{QDR_LOSS_WEIGHT}'
     max_duration = 300.0
