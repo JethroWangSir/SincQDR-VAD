@@ -8,9 +8,9 @@ import wandb
 from tqdm import tqdm
 
 from dataset import SCF_NeMo, AVA_Tuple
-from model.sincvad import SincVAD
+from model.sincqdrvad import SincQDRVAD
 from function.util import WarmupHoldDecayScheduler, save_best_k_model_with_auroc, median_smoothing_filter, metrics_calculation
-from function.loss import AUROCLoss
+from function.loss import QDRLoss
 
 # Set GPU
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
@@ -18,8 +18,8 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 WINDOW_SIZE = 0.63
 SINC_CONV = True
-AUROC_LOSS_WEIGHT = 0.05
-AUROC_LOSS_TYPE = 'psq'
+QDR_LOSS_WEIGHT = 0.05
+QDR_LOSS_TYPE = 'psq'
 
 if WINDOW_SIZE == 0.63:
     batch_size = 256
@@ -37,14 +37,14 @@ elif WINDOW_SIZE == 0.032:
     patch_size = 1
     median_kernel_size = 21
 
-if SINC_CONV and AUROC_LOSS_WEIGHT > 0.0:
-    name = f'exp_{WINDOW_SIZE}_sinc_tinyvad_{AUROC_LOSS_TYPE}_{AUROC_LOSS_WEIGHT}'
-    max_duration = 30.0
+if SINC_CONV and QDR_LOSS_WEIGHT > 0.0:
+    name = f'exp_{WINDOW_SIZE}_sinc_tinyvad_{QDR_LOSS_TYPE}_{QDR_LOSS_WEIGHT}'
+    max_duration = 300.0
 elif SINC_CONV:
     name = f'exp_{WINDOW_SIZE}_sinc_tinyvad'
-    max_duration = 30.0
-elif AUROC_LOSS_WEIGHT > 0.0:
-    name = f'exp_{WINDOW_SIZE}_tinyvad_{AUROC_LOSS_TYPE}_{AUROC_LOSS_WEIGHT}'
+    max_duration = 300.0
+elif QDR_LOSS_WEIGHT > 0.0:
+    name = f'exp_{WINDOW_SIZE}_tinyvad_{QDR_LOSS_TYPE}_{QDR_LOSS_WEIGHT}'
     max_duration = 300.0
 else:
     name = f'exp_{WINDOW_SIZE}_tinyvad'
@@ -67,8 +67,8 @@ wandb.init(project="SincVAD", name=name, config={
     "augment": True,
     "window_size": WINDOW_SIZE,
     "sinc_conv": SINC_CONV,
-    "auroc_loss_weight": AUROC_LOSS_WEIGHT,
-    "auroc_loss_type": AUROC_LOSS_TYPE,
+    "qdr_loss_weight": QDR_LOSS_WEIGHT,
+    "qdr_loss_type": QDR_LOSS_TYPE,
 })
 config = wandb.config
 torch.manual_seed(config.seed)
@@ -111,7 +111,7 @@ print('------------------------------')
 # Initialize model, loss function, and optimizer
 model = SincVAD(1, 32, 64, patch_size, 2, config.sinc_conv).to(device)
 bce_criterion = nn.BCEWithLogitsLoss()
-auroc_criterion = AUROCLoss()
+QDR_criterion = QDRLoss()
 optimizer = optim.SGD(
     model.parameters(),
     lr=config.max_lr,
@@ -147,8 +147,8 @@ for epoch in range(config.epochs):
 
         # print(f'Outputs: {outputs.shape}, Labels: {labels.shape}')
         bce_loss = bce_criterion(outputs, labels)
-        auroc_loss = auroc_criterion(outputs, labels)
-        loss = (1 - AUROC_LOSS_WEIGHT) * bce_loss + AUROC_LOSS_WEIGHT * auroc_loss
+        qdr_loss = qdr_criterion(outputs, labels)
+        loss = (1 - QDR_LOSS_WEIGHT) * bce_loss + QDR_LOSS_WEIGHT * qdr_loss
 
         loss.backward()
         optimizer.step()
@@ -157,8 +157,8 @@ for epoch in range(config.epochs):
         if batch_idx % 10 == 0:
             wandb.log({
                 "train_loss": loss.item(),
-                "bce_loss": (1 - AUROC_LOSS_WEIGHT) * bce_loss.item(),
-                "auroc_loss": AUROC_LOSS_WEIGHT * auroc_loss,
+                "bce_loss": (1 - QDR_LOSS_WEIGHT) * bce_loss.item(),
+                "qdr_loss": QDR_LOSS_WEIGHT * qdr_loss,
                 "learning_rate": scheduler.get_last_lr()[0]
             })
         
