@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from .sinc_conv import SincExtractor
+from .sinc_conv import TimeSincExtractor, FreqSincExtractor
 from .patchify import Patchify
 from .csp_tiny_layer import CSPTinyLayer
 
@@ -11,7 +11,8 @@ class SincVAD(nn.Module):
         self.sinc_conv = sinc_conv
 
         if self.sinc_conv:
-            self.extractor = SincExtractor(out_channels=64, kernel_size=101, range_constraint=True, stride=2)
+            self.extractor = TimeSincExtractor(out_channels=64, kernel_size=101, range_constraint=True, stride=2, bi_factor=True)
+            # self.extractor = FreqSincExtractor(out_channels=64, kernel_size=101, range_constraint=True, stride=2, bi_factor=True)
 
         self.patchify = Patchify(in_channels, hidden_channels, patch_size)
 
