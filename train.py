@@ -18,7 +18,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 WINDOW_SIZE = 0.63
 SINC_CONV = True
-QDR_LOSS_WEIGHT = 0.05
+QDR_LOSS_WEIGHT = 0.25
 QDR_LOSS_TYPE = 'psq'
 
 if WINDOW_SIZE == 0.63:
