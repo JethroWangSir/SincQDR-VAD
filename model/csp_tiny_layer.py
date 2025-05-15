@@ -1,8 +1,6 @@
 import torch
 import torch.nn as nn
 from .tiny_block import TinyBlock
-from transformers import MambaConfig, MambaModel
-from .conmamba import ConMamba
 
 class CSPTinyLayer(nn.Module):
     def __init__(self, in_channels, out_channels, num_blocks):
