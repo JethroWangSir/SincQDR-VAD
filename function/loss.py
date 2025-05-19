@@ -10,7 +10,7 @@ class QDRLoss(nn.Module):
         loss_type (str): Type of loss to compute ('psq' or 'csq').
         margin (float): Hyperparameter c in the loss function.
     """
-    def __init__(self, loss_type='psq', margin=0.5):
+    def __init__(self, loss_type='psq', margin=1.0):
         super(QDRLoss, self).__init__()
         assert loss_type in ['psq', 'csq'], "loss_type must be 'psq' or 'csq'"
         self.loss_type = loss_type
@@ -27,8 +27,6 @@ class QDRLoss(nn.Module):
         Returns:
             loss (Tensor): The computed loss value.
         """
-        preds = torch.sigmoid(preds)
-
         # Ensure predictions and labels are 1D
         preds = preds.flatten()
         labels = labels.flatten()
