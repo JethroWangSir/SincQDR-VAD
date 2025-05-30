@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 import wandb
 from tqdm import tqdm
 
-from dataset import SCF_NeMo, AVA_Tuple
+from dataset import SCF, AVA
 from model.sincqdrvad import SincQDRVAD
 from function.util import WarmupHoldDecayScheduler, save_best_k_model_with_auroc, median_smoothing_filter, metrics_calculation
 from function.loss import QDRLoss
@@ -21,43 +21,21 @@ SINC_CONV = True
 QDR_LOSS_WEIGHT = 0.25
 QDR_LOSS_TYPE = 'psq'
 
-if WINDOW_SIZE == 0.63:
-    batch_size = 256
-    overlap = 0.875
-    patch_size = 8
-    median_kernel_size = 7
-elif WINDOW_SIZE == 0.16:
-    batch_size = 1024
-    overlap = 0.8
-    patch_size = 2
-    median_kernel_size = 11
-elif WINDOW_SIZE == 0.032:
-    batch_size = 5120
-    overlap = 0.0
-    patch_size = 1
-    median_kernel_size = 21
+BATCH_SIZE = 256
+OVERLAP = 0.875
+PATCH_SIZE = 8
+MEDIAN_KERNEL_SIZE = 7
 
-if SINC_CONV and QDR_LOSS_WEIGHT > 0.0:
-    name = f'exp_{WINDOW_SIZE}_sinc_tinyvad_{QDR_LOSS_TYPE}_{QDR_LOSS_WEIGHT}'
-    max_duration = 300.0
-elif SINC_CONV:
-    name = f'exp_{WINDOW_SIZE}_sinc_tinyvad'
-    max_duration = 300.0
-elif QDR_LOSS_WEIGHT > 0.0:
-    name = f'exp_{WINDOW_SIZE}_tinyvad_{QDR_LOSS_TYPE}_{QDR_LOSS_WEIGHT}'
-    max_duration = 300.0
-else:
-    name = f'exp_{WINDOW_SIZE}_tinyvad'
-    max_duration = 300.0
+EXP_NAME = 'sinc_qdr_vad'
 
-exp_dir = f'./exp/{name}/'
+exp_dir = f'./exp/{EXP_NAME}/'
 os.makedirs(exp_dir, exist_ok=True)
 
 # Initialize wandb
-wandb.init(project="SincVAD", name=name, config={
+wandb.init(project="SincQDR-VAD", name=EXP_NAME, config={
     "seed": 42,
     "epochs": 150,
-    "batch_size": batch_size,
+    "batch_size": BATCH_SIZE,
     "max_lr": 0.01,
     "momentum": 0.9,
     "weight_decay": 0.001,
@@ -85,7 +63,7 @@ train_manifests = [f'./data/manifest/{WINDOW_SIZE}/balanced_background_training_
 val_dir = '/share/nas165/aaronelyu/Datasets/AVA-speech/'
 
 logging.info('Loading training set ...')
-train_dataset = SCF_NeMo(
+train_dataset = SCF(
     manifest_files=train_manifests,
     sample_duration=config.window_size,
     augment=config.augment,
@@ -95,11 +73,10 @@ train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=T
 logging.info(f'Training set size: {len(train_loader)}')
 
 logging.info('Loading validation set...')
-val_dataset = AVA_Tuple(
+val_dataset = AVA(
     root_dir=val_dir,
-    max_duration=max_duration,
     sample_duration=config.window_size,
-    overlap=overlap,
+    overlap=OVERLAP,
     feature_extraction=(not config.sinc_conv),
 )
 val_loader = DataLoader(val_dataset, batch_size=1, shuffle=False)
@@ -109,7 +86,7 @@ logging.info('Finish loading dataset!')
 print('------------------------------')
 
 # Initialize model, loss function, and optimizer
-model = SincVAD(1, 32, 64, patch_size, 2, config.sinc_conv).to(device)
+model = SincVAD(1, 32, 64, PATCH_SIZE, 2, config.sinc_conv).to(device)
 bce_criterion = nn.BCEWithLogitsLoss()
 QDR_criterion = QDRLoss()
 optimizer = optim.SGD(
@@ -184,7 +161,7 @@ for epoch in range(config.epochs):
             val_probs = model.predict(val_inputs)
 
             # Apply median smoothing filter
-            val_probs_list, val_labels_list = median_smoothing_filter(val_probs, val_labels, val_probs_list, val_labels_list, median_kernel_size, device)
+            val_probs_list, val_labels_list = median_smoothing_filter(val_probs, val_labels, val_probs_list, val_labels_list, MEDIAN_KERNEL_SIZE, device)
 
     # Concatenate results
     val_labels_cat = torch.cat(val_labels_list, dim=0).cpu().numpy()
