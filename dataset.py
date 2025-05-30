@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 
 from function.preprocessing import shift_perturbation, white_noise_perturbation, spec_augment, spec_cutout
 
-class SCF_NeMo(Dataset):
+class SCF(Dataset):
     def __init__(self, manifest_files, sample_duration=0.63, sample_rate=16000, n_fft=400, n_mels=64, win_length=400, hop_length=160, 
                 augment=False, feature_extraction=True, add_noise=False, noise_csv=None, noise_audio_dir=None, noise_config_path=None):
         self.sample_duration = sample_duration
@@ -177,7 +177,7 @@ class SCF_NeMo(Dataset):
         return self.noise_zero_power_count
 
 
-class AVA_Tuple(Dataset):
+class AVA(Dataset):
     def __init__(self, root_dir, max_duration=300.0, sample_duration=0.63, overlap=0.875, sample_rate=16000,
                 n_fft=400, n_mels=64, win_length=400, hop_length=160, feature_extraction=True):
         self.root_dir = root_dir
