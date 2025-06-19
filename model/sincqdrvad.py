@@ -4,9 +4,9 @@ from .sinc_conv import TimeSincExtractor, FreqSincExtractor
 from .patchify import Patchify
 from .csp_tiny_layer import CSPTinyLayer
 
-class SincVAD(nn.Module):
+class SincQDRVAD(nn.Module):
     def __init__(self, in_channels, hidden_channels, out_channels, patch_size, num_blocks, sinc_conv):
-        super(TinyVAD, self).__init__()
+        super(SincQDRVAD, self).__init__()
 
         self.sinc_conv = sinc_conv
 
